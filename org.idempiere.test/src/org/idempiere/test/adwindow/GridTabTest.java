@@ -385,5 +385,87 @@ public class GridTabTest extends AbstractTestCase {
 		}
 
 	}
+@Test
+	void testAttachment_PostIt_Chat_Label() {
+		Properties ctx = Env.getCtx();
+		// create bpartner
+		MBPartner bp = new MBPartner(ctx ,0 , null);
+		bp.setValue("BP" + System.currentTimeMillis());
+		bp.setName("Test BP");
+		bp.saveEx();
+		int recordId = bp.get_ID();
+		String recordUU = bp.get_UUID();
+		int tableId = MTable.getTable_ID(MBPartner.Table_Name);
+		
+		MAttachment attachment = new MAttachment(ctx, tableId, recordId, recordUU, null);
+		MPostIt postIt = new MPostIt(ctx, 0, null);
+		MChat chat = new MChat(ctx, 0, null);
+		MLabelAssignment labelAssignment = new MLabelAssignment(ctx, 0, null);
+		MLabel label = new MLabel(ctx, 0, null);
+		try(attachment) {			
+			var gridWindow = GridWindowTest.createGridWindow(SystemIDs.WINDOW_BUSINESS_PARTNER);
+			GridTab gt = gridWindow.getTab(0);
+			
+			//navigate to record
+			MQuery query = new MQuery(MBPartner.Table_Name);
+			query.addRestriction(MBPartner.COLUMNNAME_C_BPartner_ID, MQuery.EQUAL, recordId);
+			gt.setQuery(query);
+			gt.query(false);
+			
+			assertEquals(1, gt.getRowCount(), "Should have one record");
+			assertEquals(recordId, gt.getRecord_ID(), "Failed to navigate to test record");
+			
+			// test attachment
+			attachment.setTextMsg("Test Attachment");
+			attachment.addEntry("test.txt", "test data".getBytes());
+			attachment.saveEx();
+			int attachmentId = attachment.get_ID();		
+			int AD_Attachment_ID = gt.getAD_AttachmentID();
+			assertEquals(attachmentId, AD_Attachment_ID);
 
+			// test postit
+			postIt.setAD_Table_ID(tableId);
+			postIt.setRecord_ID(recordId);
+			postIt.setRecord_UU(recordUU);
+			postIt.setText("Test PostIt");
+			postIt.saveEx();
+			int postItId = postIt.get_ID();
+			int AD_PostIt_ID = gt.getAD_PostIt_ID();
+			assertEquals(postItId, AD_PostIt_ID);
+
+			// test chat
+			chat.setAD_Table_ID(tableId);
+			chat.setRecord_ID(recordId);
+			chat.setRecord_UU(recordUU);
+			chat.setDescription("Test Chat");
+			chat.saveEx();
+			int chatId = chat.get_ID();
+			int CM_Chat_ID = gt.getCM_ChatID();
+			assertEquals(chatId, CM_Chat_ID);
+			
+			// test label
+			label.setName("Test Label " + System.currentTimeMillis());
+			label.saveEx();			
+			labelAssignment.setAD_Table_ID(tableId);
+			labelAssignment.setRecord_ID(recordId);
+			labelAssignment.setRecord_UU(recordUU);
+			labelAssignment.setAD_Label_ID(label.get_ID());
+			labelAssignment.saveEx();
+			assertTrue(gt.hasLabel(), "Should have label");
+		} finally {
+			// clean up
+			rollback();
+			if (attachment.get_ID() > 0)
+				attachment.deleteEx(true);
+			if (postIt.get_ID() > 0)
+				postIt.deleteEx(true);
+			if (chat.get_ID() > 0)
+				chat.deleteEx(true);
+			if (labelAssignment.get_ID() > 0)
+				labelAssignment.deleteEx(true);			
+			if (label.get_ID() > 0)
+				label.deleteEx(true);
+			bp.deleteEx(true);
+		}
+	}
 }

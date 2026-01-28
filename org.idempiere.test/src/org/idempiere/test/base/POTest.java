@@ -742,5 +742,50 @@ public class POTest extends AbstractTestCase
         );
     }
     
-
+    @Test
+    void testPdfAttachment() throws IOException {
+    	MTest test = new MTest(Env.getCtx(), 0, getTrxName());
+		test.setName("testPdfAttachment");
+		test.saveEx();
+		
+		//test pdf attachment
+		MAttachment attachment = new MAttachment(Env.getCtx(), test.get_Table_ID(), test.get_ID(), test.get_UUID(), getTrxName());
+		attachment.setTextMsg("test pdf");
+		
+		File pdfFile = File.createTempFile("test", ".pdf");
+		pdfFile.deleteOnExit();
+		try (FileWriter writer = new FileWriter(pdfFile)) {
+			writer.write("dummy pdf content");
+		}
+		
+		try (attachment) {
+			MAttachmentEntry entry1 = new MAttachmentEntry(pdfFile.getName(), "dummy pdf content".getBytes(), 0);
+			attachment.addEntry(entry1);
+			attachment.saveEx();		
+			assertTrue(test.isPdfAttachment());
+			byte[] attachmentBytes = test.getPdfAttachment();
+			assertNotNull(attachmentBytes);
+			assertTrue(attachmentBytes.length > 0);
+		}		
+		
+		// test non-pdf attachment
+		File txtFile = File.createTempFile("test", ".txt");
+		txtFile.deleteOnExit();
+		try (FileWriter writer = new FileWriter(txtFile)) {
+			writer.write("dummy txt content");
+		}
+		
+		MTest test1 = new MTest(Env.getCtx(), 0, getTrxName());
+		test1.setName("testNonPdfAttachment1");
+		test1.saveEx();
+		MAttachment attachment1 = new MAttachment(Env.getCtx(), test1.get_Table_ID(), test1.get_ID(), test1.get_UUID(), getTrxName());
+		attachment1.setTextMsg("test non pdf");
+		try (attachment1) {
+			MAttachmentEntry entry2 = new MAttachmentEntry(txtFile.getName(), "dummy txt content".getBytes(), 0);
+			attachment1.addEntry(entry2);
+			attachment1.saveEx();
+		}
+		assertFalse(test1.isPdfAttachment());
+		assertNull(test1.getPdfAttachment());		
+    }
 }
