@@ -135,7 +135,6 @@ public class InvoiceCreateInOut extends SvrProcess
 	{
 		BigDecimal qtyMatched = invoiceLine.getMatchedQty();
 		BigDecimal qtyInvoiced = invoiceLine.getQtyInvoiced();
-		BigDecimal qtyEntered = new MOrderLine(getCtx(), invoiceLine.getC_OrderLine_ID(), null).getQtyEntered();
 		
 		// Remaining quantity to generate
 		BigDecimal qtyNotMatched = qtyInvoiced.subtract(qtyMatched);
@@ -165,7 +164,7 @@ public class InvoiceCreateInOut extends SvrProcess
 			if(qtyNotMatched.compareTo(qtyRemaining) > 0) {
 				MProduct product = MProduct.get(invoiceLine.getM_Product_ID());
 				String productName = product != null ? product.getName() : "";
-				throw new AdempiereException(Msg.getMsg(getCtx(), "ReceiptQtyExceedsBalance", new Object[] {invoiceLine.getLine(),product.getName(),qtyRemaining}));
+				throw new AdempiereException(Msg.getMsg(getCtx(), "ReceiptQtyExceedsBalance", new Object[] {invoiceLine.getLine(),productName,qtyRemaining}));
 			}
 		}
 		
