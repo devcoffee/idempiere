@@ -79,21 +79,14 @@ public class MProductionLineMA extends X_M_ProductionLineMA {
 		setM_ProductionLine_ID(parent.get_ID());
 		setMovementQty(qty);
 		setAD_Org_ID(parent.getAD_Org_ID());
-		if (dateMaterialPolicy == null)
-		{
-			if (asi > 0)
-			{
-				dateMaterialPolicy = MStorageOnHand.getDateMaterialPolicy(parent.getM_Product_ID(), asi, parent.get_TrxName());
-			}
-			if (dateMaterialPolicy == null)
-			{
-				MProduction prod = new MProduction(getCtx(), parent.getM_Production_ID(), get_TrxName());
-				dateMaterialPolicy = prod.getMovementDate();
-			}
-		}
-		setDateMaterialPolicy(dateMaterialPolicy);
+		setDateMaterialPolicy(MStorageOnHand.resolveLineMADatePolicy(
+			parent.getM_Product_ID(),
+			asi,
+			dateMaterialPolicy,
+			new MProduction(parent.getCtx(), parent.getM_Production_ID(), parent.get_TrxName()).getMovementDate(),
+			parent.get_TrxName()));
 	}
-	
+
 	@Override
 	public void setDateMaterialPolicy(Timestamp DateMaterialPolicy) {
 		if (DateMaterialPolicy != null)
@@ -113,8 +106,10 @@ public class MProductionLineMA extends X_M_ProductionLineMA {
 		if(dateMPolicy==null){
 			dateMPolicy = new Timestamp(new Date().getTime());
 		}
+		dateMPolicy = MStorageOnHand.getEffectiveDateMaterialPolicy(
+			parent.getM_Product_ID(), dateMPolicy, parent.get_TrxName());
 		where = where + "AND DateMaterialPolicy = trunc(cast(? as date))";
-		
+
 		MProductionLineMA lineMA = MTable.get(parent.getCtx(), MProductionLineMA.Table_Name).createQuery(where, parent.get_TrxName())
 		.setParameters(parent.getM_ProductionLine_ID(), asi,dateMPolicy).first();
 		
