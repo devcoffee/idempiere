@@ -514,6 +514,68 @@ public class DataEngine
 					pdc = new PrintDataColumn(AD_PrintFormatItem_ID, AD_Column_ID, ColumnName, AD_Reference_ID, FieldLength, orderName, isPageBreak, foreignColumnName);
 					synonymNext();
 				}
+				
+				else if (DisplayType.isChosenMultipleSelection(AD_Reference_ID)) {
+					if (ColumnSQL.length() > 0)
+						lookupSQL = ColumnSQL;
+
+					String display = ColumnName;
+
+					if (DisplayType.isList(AD_Reference_ID) || AD_Reference_Value_ID <= 0) {
+						String eSql;
+
+						if (Env.isBaseLanguage(m_language, "AD_Ref_List")) {
+							eSql = "(select string_agg(rl.Name, ', ' order by rl.Name) " + " from AD_Ref_List rl "
+									+ " where rl.AD_Reference_ID=" + AD_Reference_Value_ID
+									+ "   and rl.Value = any(string_to_array(replace(NVL(" + lookupSQL
+									+ "::text,''),' ',''), ',')))";
+						} else {
+							eSql = "(select string_agg(NVL(trl.Name, rl.Name), ', ' order by NVL(trl.Name, rl.Name)) "
+									+ " from AD_Ref_List rl " + " left join AD_Ref_List_Trl trl "
+									+ "   on trl.AD_Ref_List_ID = rl.AD_Ref_List_ID " + "  and trl.AD_Language = '"
+									+ m_language.getAD_Language() + "' " + " where rl.AD_Reference_ID="
+									+ AD_Reference_Value_ID + "   and rl.Value = any(string_to_array(replace(NVL("
+									+ lookupSQL + "::text,''),' ',''), ',')))";
+						}
+
+						sqlSELECT.append(eSql).append(" as ").append(m_synonym).append(display).append(",")
+								.append(lookupSQL).append(" as ").append(ColumnName).append(",");
+						groupByColumns.add(lookupSQL);
+						orderName = m_synonym + display;
+
+						pdc = new PrintDataColumn(AD_PrintFormatItem_ID, AD_Column_ID, ColumnName, DisplayType.Text,
+								FieldLength, orderName, isPageBreak);
+						synonymNext();
+					} else {
+						TableReference tr = getTableReference(AD_Reference_Value_ID);
+
+						String displayColumn = tr.DisplayColumn;
+						String keyColumn = tr.KeyColumn;
+						String refTable = tr.TableName;
+
+						String translatedDisplay = displayColumn;
+						if (tr.IsValueDisplayed) {
+							translatedDisplay = "NVL(t.Value,'') || case when NVL(t.Value,'')<>'' THEN ' - ' ELSE '' END || NVL(t."
+									+ displayColumn + ", '')";
+						} else {
+							translatedDisplay = "t." + displayColumn;
+						}
+
+						String eSql = "(select string_agg((" + translatedDisplay + ")::text, ', ' order by ("
+								+ translatedDisplay + ")::text) " + " from " + refTable + " t " + " where t."
+								+ keyColumn + "::text = any(string_to_array(replace(NVL(" + lookupSQL
+								+ "::text,''),' ',''), ',')))";
+
+						sqlSELECT.append(eSql).append(" as ").append(m_synonym).append(display).append(",")
+								.append(lookupSQL).append(" as ").append(ColumnName).append(",");
+						groupByColumns.add(lookupSQL);
+						orderName = m_synonym + display;
+
+						pdc = new PrintDataColumn(AD_PrintFormatItem_ID, AD_Column_ID, ColumnName, DisplayType.Text,
+								FieldLength, orderName, isPageBreak, keyColumn);
+						synonymNext();
+					}
+				}
 
 				//	-- List or Button with ReferenceValue --
 				else if (DisplayType.isList(AD_Reference_ID) 
