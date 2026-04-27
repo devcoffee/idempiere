@@ -520,59 +520,139 @@ public class DataEngine
 						lookupSQL = ColumnSQL;
 
 					String display = ColumnName;
+					boolean isOracle = DB.isOracle();
 
+					String lookupValue;
+					String csvValuesSql;
+
+					if (isOracle) {
+						lookupValue = "NVL(TO_CHAR(" + lookupSQL + "), '')";
+
+						csvValuesSql =
+							"(select trim(regexp_substr(replace(" + lookupValue + ", ' ', ''), '[^,]+', 1, level)) " +
+							"   from dual " +
+							" connect by regexp_substr(replace(" + lookupValue + ", ' ', ''), '[^,]+', 1, level) is not null)";
+					} else {
+						lookupValue = "NVL(" + lookupSQL + "::text,'')";
+						csvValuesSql = "string_to_array(replace(" + lookupValue + ", ' ', ''), ',')";
+					}
+
+					// Multi seleção baseada em lista
 					if (DisplayType.isList(AD_Reference_ID) || AD_Reference_Value_ID <= 0) {
 						String eSql;
 
 						if (Env.isBaseLanguage(m_language, "AD_Ref_List")) {
-							eSql = "(select string_agg(rl.Name, ', ' order by rl.Name) " + " from AD_Ref_List rl "
-									+ " where rl.AD_Reference_ID=" + AD_Reference_Value_ID
-									+ "   and rl.Value = any(string_to_array(replace(NVL(" + lookupSQL
-									+ "::text,''),' ',''), ',')))";
+							if (isOracle) {
+								eSql =
+									"(select LISTAGG(rl.Name, ', ') WITHIN GROUP (ORDER BY rl.Name) " +
+									"   from AD_Ref_List rl " +
+									"  where rl.AD_Reference_ID = " + AD_Reference_Value_ID +
+									"    and rl.Value in " + csvValuesSql +
+									")";
+							} else {
+								eSql =
+									"(select string_agg(rl.Name, ', ' order by rl.Name) " +
+									"   from AD_Ref_List rl " +
+									"  where rl.AD_Reference_ID = " + AD_Reference_Value_ID +
+									"    and rl.Value = any(" + csvValuesSql + ")" +
+									")";
+							}
 						} else {
-							eSql = "(select string_agg(NVL(trl.Name, rl.Name), ', ' order by NVL(trl.Name, rl.Name)) "
-									+ " from AD_Ref_List rl " + " left join AD_Ref_List_Trl trl "
-									+ "   on trl.AD_Ref_List_ID = rl.AD_Ref_List_ID " + "  and trl.AD_Language = '"
-									+ m_language.getAD_Language() + "' " + " where rl.AD_Reference_ID="
-									+ AD_Reference_Value_ID + "   and rl.Value = any(string_to_array(replace(NVL("
-									+ lookupSQL + "::text,''),' ',''), ',')))";
+							String translatedName = "NVL(trl.Name, rl.Name)";
+
+							if (isOracle) {
+								eSql =
+									"(select LISTAGG(" + translatedName + ", ', ') WITHIN GROUP (ORDER BY " + translatedName + ") " +
+									"   from AD_Ref_List rl " +
+									"   left join AD_Ref_List_Trl trl " +
+									"     on trl.AD_Ref_List_ID = rl.AD_Ref_List_ID " +
+									"    and trl.AD_Language = '" + m_language.getAD_Language() + "' " +
+									"  where rl.AD_Reference_ID = " + AD_Reference_Value_ID +
+									"    and rl.Value in " + csvValuesSql +
+									")";
+							} else {
+								eSql =
+									"(select string_agg(" + translatedName + ", ', ' order by " + translatedName + ") " +
+									"   from AD_Ref_List rl " +
+									"   left join AD_Ref_List_Trl trl " +
+									"     on trl.AD_Ref_List_ID = rl.AD_Ref_List_ID " +
+									"    and trl.AD_Language = '" + m_language.getAD_Language() + "' " +
+									"  where rl.AD_Reference_ID = " + AD_Reference_Value_ID +
+									"    and rl.Value = any(" + csvValuesSql + ")" +
+									")";
+							}
 						}
 
 						sqlSELECT.append(eSql).append(" as ").append(m_synonym).append(display).append(",")
 								.append(lookupSQL).append(" as ").append(ColumnName).append(",");
+
 						groupByColumns.add(lookupSQL);
 						orderName = m_synonym + display;
 
-						pdc = new PrintDataColumn(AD_PrintFormatItem_ID, AD_Column_ID, ColumnName, DisplayType.Text,
-								FieldLength, orderName, isPageBreak);
+						pdc = new PrintDataColumn(
+								AD_PrintFormatItem_ID,
+								AD_Column_ID,
+								ColumnName,
+								DisplayType.Text,
+								FieldLength,
+								orderName,
+								isPageBreak
+						);
+
 						synonymNext();
+
 					} else {
+						// Multi seleção baseada em tabela/search
 						TableReference tr = getTableReference(AD_Reference_Value_ID);
 
 						String displayColumn = tr.DisplayColumn;
 						String keyColumn = tr.KeyColumn;
 						String refTable = tr.TableName;
 
-						String translatedDisplay = displayColumn;
+						String translatedDisplay;
+
 						if (tr.IsValueDisplayed) {
-							translatedDisplay = "NVL(t.Value,'') || case when NVL(t.Value,'')<>'' THEN ' - ' ELSE '' END || NVL(t."
-									+ displayColumn + ", '')";
+							translatedDisplay =
+								"NVL(t.Value,'') || CASE WHEN NVL(t.Value,'') <> '' THEN ' - ' ELSE '' END || NVL(t."
+								+ displayColumn + ", '')";
 						} else {
 							translatedDisplay = "t." + displayColumn;
 						}
 
-						String eSql = "(select string_agg((" + translatedDisplay + ")::text, ', ' order by ("
-								+ translatedDisplay + ")::text) " + " from " + refTable + " t " + " where t."
-								+ keyColumn + "::text = any(string_to_array(replace(NVL(" + lookupSQL
-								+ "::text,''),' ',''), ',')))";
+						String eSql;
+
+						if (isOracle) {
+							eSql =
+								"(select LISTAGG(TO_CHAR(" + translatedDisplay + "), ', ') " +
+								"        WITHIN GROUP (ORDER BY TO_CHAR(" + translatedDisplay + ")) " +
+								"   from " + refTable + " t " +
+								"  where TO_CHAR(t." + keyColumn + ") in " + csvValuesSql +
+								")";
+						} else {
+							eSql =
+								"(select string_agg((" + translatedDisplay + ")::text, ', ' order by (" + translatedDisplay + ")::text) " +
+								"   from " + refTable + " t " +
+								"  where t." + keyColumn + "::text = any(" + csvValuesSql + ")" +
+								")";
+						}
 
 						sqlSELECT.append(eSql).append(" as ").append(m_synonym).append(display).append(",")
 								.append(lookupSQL).append(" as ").append(ColumnName).append(",");
+
 						groupByColumns.add(lookupSQL);
 						orderName = m_synonym + display;
 
-						pdc = new PrintDataColumn(AD_PrintFormatItem_ID, AD_Column_ID, ColumnName, DisplayType.Text,
-								FieldLength, orderName, isPageBreak, keyColumn);
+						pdc = new PrintDataColumn(
+								AD_PrintFormatItem_ID,
+								AD_Column_ID,
+								ColumnName,
+								DisplayType.Text,
+								FieldLength,
+								orderName,
+								isPageBreak,
+								keyColumn
+						);
+
 						synonymNext();
 					}
 				}
